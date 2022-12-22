@@ -1,0 +1,153 @@
+---
+- name: Instalar e configurar o ContainerD
+  hosts: all
+  tasks:
+  - name: Instalação dos módulos do kernel do Linux
+    ansible.builtin.copy:
+      src: ./k8s.conf
+      dest: /etc/modules-load.d/k8s.conf
+      mode: '777'
+
+  - name: Adicionando overlay
+    modprobe:
+      name: overlay
+      state: present
+
+  - name: Adicionando o br_netfilter
+    modprobe:
+      name: br_netfilter
+      state: present
+
+  - name: Instalação dos parâmetros do sysctl
+    ansible.builtin.copy:
+      src: ./k8s-cri.conf
+      dest: /etc/sysctl.d/k8s.conf
+      mode: '644'
+
+  - name: Executando o comando sysctl para implementação
+    command: "sysctl --system"
+
+  - name: Adicionar a chave do repositório APT
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Adicionar repositório para instalar o containerd
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu bionic stable
+      state: present
+  
+  - name: Instalar ContainerD
+    apt:
+      #name: containerd.io=1.6.12-1
+      name: containerd.io=1.6.14-1
+      update_cache: yes
+
+  - name: Hold containerd
+    ansible.builtin.dpkg_selections:
+      name: containerd
+      selection: hold
+
+  - name: Criação da pasta de configuração do containerd
+    file:
+      path: /etc/containerd
+      state: directory
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Criar arquivo de configuração
+    shell: containerd config default > /etc/containerd/config.toml
+
+  - name: Trocando o config 1 do containerd
+    command: sed -i 's/systemd_cgroup = false/systemd_cgroup = true/g' /etc/containerd/config.toml
+
+  - name: Trocando o config 2 do containerd
+    command: sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+
+  - name: Restart ContainerD
+    ansible.builtin.service:
+      name: containerd
+      state: restarted
+
+- name: Instalar kubeadm, kubelet e kubectl
+  hosts: all
+  tasks:
+  - name: Instalar PreReqs
+    apt:
+      pkg:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      state: present
+
+  - name: Adicionar a chave do repositório APT
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+      state: present
+
+  - name: Adicionar repositório para instalar o Kubernetes
+    apt_repository:
+      repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+  
+  - name: Instalar Kubeadm, Kubelet e Kubectl
+    apt:
+      pkg:
+      - kubelet=1.26.0-00
+      - kubeadm=1.26.0-00
+      - kubectl=1.26.0-00
+      update_cache: yes
+
+  - name: Hold kubeadm, kubelet e kubectl
+    ansible.builtin.dpkg_selections:
+      name: kubeadm
+      selection: hold
+    ansible.builtin.dpkg_selections:
+      name: kubelet
+      selection: hold
+    ansible.builtin.dpkg_selections:
+      name: kubectl
+      selection: hold
+
+- name: Instalar control_plane K8S 
+  hosts: control_plane
+  tasks:
+  - name: Limpar Inicialização
+    command: kubeadm reset -f
+  
+  - name: Inicializar
+    command: kubeadm init
+  
+  - name: Criar diretório .kube
+    file:
+      path: ~/.kube
+      state: directory
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Criar arquivo kube config
+    ansible.builtin.copy:
+      src: /etc/kubernetes/admin.conf
+      dest: ~/.kube/config
+      remote_src: yes
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Aplicar a Instalação do Calico
+    command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+
+  - name: Criar chave para executar join master > nodes
+    command: kubeadm token create --print-join-command
+    register: print_join_command
+
+  - name: Adicionar token fact
+    set_fact: join_command="{{ print_join_command.stdout }}"
+
+- name: Linkar Nodes com Master
+  hosts: worker_node
+  tasks:
+  - name: Executar join
+    command: "{{ hostvars[groups['control_plane'][0]['join_command']] }}"
