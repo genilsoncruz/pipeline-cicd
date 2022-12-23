@@ -1,9 +1,9 @@
 [control_plane]
-178.128.153.66
+143.198.72.156
 
 [worker_node]
-198.211.116.115
-167.71.28.4
+143.244.191.21
+146.190.125.213
 
 [control_plane:vars]
 ansible_ssh_private_key_file=~/.ssh/id_rsa

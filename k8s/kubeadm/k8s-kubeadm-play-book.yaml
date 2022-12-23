@@ -39,8 +39,8 @@
   
   - name: Instalar ContainerD
     apt:
-      #name: containerd.io=1.6.12-1
-      name: containerd.io=1.6.14-1
+      name: containerd.io=1.6.12-1
+      #name: containerd.io=1.6.14-1
       update_cache: yes
 
   - name: Hold containerd
@@ -58,9 +58,6 @@
 
   - name: Criar arquivo de configuração
     shell: containerd config default > /etc/containerd/config.toml
-
-  - name: Trocando o config 1 do containerd
-    command: sed -i 's/systemd_cgroup = false/systemd_cgroup = true/g' /etc/containerd/config.toml
 
   - name: Trocando o config 2 do containerd
     command: sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
@@ -125,7 +122,7 @@
       state: directory
       owner: root
       group: root
-      mode: 0644
+      mode: 0777
 
   - name: Criar arquivo kube config
     ansible.builtin.copy:
@@ -134,20 +131,25 @@
       remote_src: yes
       owner: root
       group: root
-      mode: 0644
+      mode: 0777
 
   - name: Aplicar a Instalação do Calico
     command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
 
   - name: Criar chave para executar join master > nodes
     command: kubeadm token create --print-join-command
-    register: print_join_command
+    register: print_join_command_raw
 
   - name: Adicionar token fact
-    set_fact: join_command="{{ print_join_command.stdout }}"
+    set_fact: join_command="{{ print_join_command_raw.stdout }}"
+
+  - debug: mgs = "join command is {{ print_join_command_raw.stdout }}"
 
 - name: Linkar Nodes com Master
   hosts: worker_node
   tasks:
+  - name: Limpar Inicialização
+    command: kubeadm reset -f
+  
   - name: Executar join
     command: "{{ hostvars[groups['control_plane'][0]['join_command']] }}"
