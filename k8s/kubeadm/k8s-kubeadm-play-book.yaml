@@ -96,13 +96,17 @@
       - kubectl=1.26.0-00
       update_cache: yes
 
-  - name: Hold kubeadm, kubelet e kubectl
+  - name: Hold kubeadm
     ansible.builtin.dpkg_selections:
       name: kubeadm
       selection: hold
+
+  - name: Hold kubelet
     ansible.builtin.dpkg_selections:
       name: kubelet
       selection: hold
+
+  - name: Hold kubectl
     ansible.builtin.dpkg_selections:
       name: kubectl
       selection: hold
@@ -141,9 +145,12 @@
     register: print_join_command_raw
 
   - name: Adicionar token fact
-    set_fact: join_command="{{ print_join_command_raw.stdout }}"
+    ansible.builtin.set_fact: join_command="{{ print_join_command_raw.stdout }}"
 
-  - debug: mgs = "join command is {{ print_join_command_raw.stdout }}"
+#  - name: Exibindo o token
+#    ansible.builtin.debug:
+#      msg: "{{ join_command }}"
+#    when: join_command != ""
 
 - name: Linkar Nodes com Master
   hosts: worker_node
@@ -151,5 +158,9 @@
   - name: Limpar Inicialização
     command: kubeadm reset -f
   
+  - name: Mostrar join_command
+    ansible.builtin.debug:
+      msg: "{{ hostvars[groups['control_plane'][0]]['join_command'] }}"
+
   - name: Executar join
-    command: "{{ hostvars[groups['control_plane'][0]['join_command']] }}"
+    command: "{{ hostvars[groups['control_plane'][0]]['join_command'] }}"
