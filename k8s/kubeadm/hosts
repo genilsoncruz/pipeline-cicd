@@ -1,0 +1,14 @@
+[control_plane]
+161.35.116.181
+
+[worker_node]
+161.35.10.204
+206.189.180.146
+
+[control_plane:vars]
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_user=root
+
+[worker_node:vars]
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_user=root
